@@ -381,7 +381,27 @@ void* mm_malloc (size_t size) {
   // Implement mm_malloc.  You can change or remove any of the above
   // code.  It is included as a suggestion of where to start.
   // You will want to replace this return statement...
-  return NULL; 
+
+  // NOTE: To free a block, remove it from the list and return a pointer to it.
+  // NOTE: Return should point to payload, or where the "next" pointer would be stored in the BlockInfo
+
+  // 1) Search free list: call searchFreeList(size_t reqSize)
+  // Check if list is full. Add condition for null.
+  ptrFreeBlock = searchFreeList(reqSize);
+  // Find out how big is it, and if its too big we split it.
+  // If we split, we need to insert FreeBlock
+  // If diff (size given - size asked for) < MinBlockSize dont split
+  if ((SIZE(ptrFreeBlock->sizeAndTags) - reqSize) >= MIN_BLOCK_SIZE) {
+    BlockInfo * ptrNewFreeBlock = UNSCALED_POINTER_ADD(ptrFreeBlock, reqSize);
+    ptrNewFreeBlock->sizeAndTags = ptrNewFreeBlock->sizeAndTags | TAG_PRECEDING_USED;
+    insertFreeBlock(ptrNewFreeBlock);
+  }
+  // 2) Remove that block from the list
+  removeFreeBlock(ptrFreeBlock);
+  // 3) Update size + tag
+  ptrFreeBlock->sizeAndTags = ptrFreeBlock->sizeAndTags | TAG_USED;
+  // 4) Return pointer to the payload of that block
+  return UNSCALED_POINTER_ADD(ptrFreeBlock, WORD_SIZE); 
 }
 
 /* Free the block referenced by ptr. */
