@@ -380,27 +380,31 @@ void* mm_malloc (size_t size) {
 
   // Implement mm_malloc.  You can change or remove any of the above
   // code.  It is included as a suggestion of where to start.
-  // You will want to replace this return statement...
 
   // NOTE: To free a block, remove it from the list and return a pointer to it.
-  // NOTE: Return should point to payload, or where the "next" pointer would be stored in the BlockInfo
 
-  // 1) Search free list: call searchFreeList(size_t reqSize)
-  // Check if list is full. Add condition for null.
+  // 1) Search free list for free block.
+  //    If it is full, request more space.
   ptrFreeBlock = searchFreeList(reqSize);
-  // Find out how big is it, and if its too big we split it.
-  // If we split, we need to insert FreeBlock
-  // If diff (size given - size asked for) < MinBlockSize dont split
-  if ((SIZE(ptrFreeBlock->sizeAndTags) - reqSize) >= MIN_BLOCK_SIZE) {
-    BlockInfo * ptrNewFreeBlock = UNSCALED_POINTER_ADD(ptrFreeBlock, reqSize);
-    ptrNewFreeBlock->sizeAndTags = ptrNewFreeBlock->sizeAndTags | TAG_PRECEDING_USED;
-    insertFreeBlock(ptrNewFreeBlock);
+  if (ptrFreeBlock == NULL) {
+    requestMoreSpace(reqSize);
+    ptrFreeBlock = searchFreeList(reqSize);
+  }
+  // Find out how big is it, and if its too big we split it and insert ptrNewFreeBlock
+  // If diff (size given - size asked for) < MIN_BLOCK_SIZE dont split.
+  blockSize = SIZE(ptrFreeBlock->sizeAndTags);
+  if ((blockSize - reqSize) >= MIN_BLOCK_SIZE) {
+    BlockInfo * ptrNewFreeBlock = UNSCALED_POINTER_ADD(ptrFreeBlock, reqSize); // Pointer to new free block.
+    size_t newFreeBlockSize = blockSize - reqSize;
+    ptrNewFreeBlock->sizeAndTags = newFreeBlockSize | TAG_PRECEDING_USED; // Update size and tag of new free block.
+    // TO DO: Set footer
+    insertFreeBlock(ptrNewFreeBlock); // Insert new block into free list
   }
   // 2) Remove that block from the list
   removeFreeBlock(ptrFreeBlock);
   // 3) Update size + tag
-  ptrFreeBlock->sizeAndTags = ptrFreeBlock->sizeAndTags | TAG_USED;
-  // 4) Return pointer to the payload of that block
+  ptrFreeBlock->sizeAndTags = (ptrFreeBlock->sizeAndTags & TAG_PRECEDING_USED) | blockSize | TAG_USED;
+  // 4) Return pointer to the payload of that block, where the "next" pointer would be stored in the BlockInfo
   return UNSCALED_POINTER_ADD(ptrFreeBlock, WORD_SIZE); 
 }
 
