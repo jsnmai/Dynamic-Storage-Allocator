@@ -430,11 +430,14 @@ void mm_free (void *ptr) {     // Pointer to PAYLOAD.
   blockSize = SIZE(blockInfo->sizeAndTags);
   footer = UNSCALED_POINTER_ADD(blockInfo, (blockSize - WORD_SIZE)); // Move pointer to footer location.
   *footer = blockInfo->sizeAndTags;                                  // Set footer.
-
-  // Coalesce if necessary by calling coalesceFreeBlock()
-  // coalesceFreeBlock(blockInfo);
+  // TO DO: Update following block's preceding block used tag.
+  // Notify followingBlock about newly preceding free block by clearing 2nd lowest bit bymasking with "TAG_PRECEDING_USED = 2"
+  followingBlock = UNSCALED_POINTER_ADD(blockInfo, blockSize);
+  followingBlock->sizeAndTags = followingBlock->sizeAndTags & (~TAG_PRECEDING_USED);
   // Insert new freed block into the free list
   insertFreeBlock(blockInfo);
+  // Coalesce if necessary by calling coalesceFreeBlock()
+  coalesceFreeBlock(blockInfo);
 }
 
 
