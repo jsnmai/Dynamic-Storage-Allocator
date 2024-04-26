@@ -358,7 +358,7 @@ void* mm_malloc (size_t size) {
   size_t reqSize;
   BlockInfo * ptrFreeBlock = NULL;
   size_t blockSize;
-  size_t precedingBlockUseTag; // blockInfo + blockSize - WORD_SIZE
+  size_t precedingBlockUseTag; 
   size_t * footer; 
 
   // Zero-size requests get NULL.
@@ -389,25 +389,25 @@ void* mm_malloc (size_t size) {
     requestMoreSpace(reqSize);
     ptrFreeBlock = searchFreeList(reqSize);
   }
-  // Calculate block size, and if its too big we split it and insert ptrNewFreeBlock
+  // Calculate total free block size, and if its too big we split it and insert ptrNewFreeBlock.
   // If diff (size given - size asked for) < MIN_BLOCK_SIZE dont split.
   blockSize = SIZE(ptrFreeBlock->sizeAndTags);
   if ((blockSize - reqSize) >= MIN_BLOCK_SIZE) {
     BlockInfo * ptrNewFreeBlock = UNSCALED_POINTER_ADD(ptrFreeBlock, reqSize); // Pointer to new free block.
     size_t newFreeBlockSize = blockSize - reqSize;
     ptrNewFreeBlock->sizeAndTags = newFreeBlockSize | TAG_PRECEDING_USED; // Update size new free block. Mark preceding block is used.
-    // Set footer for free blocks. Replica for the header.
+    // Set footer for free block. Replica of the header.
     footer = UNSCALED_POINTER_ADD(ptrNewFreeBlock, (newFreeBlockSize - WORD_SIZE)); // Move pointer to footer location.
     *footer = newFreeBlockSize | TAG_PRECEDING_USED;                                // Set footer.
     insertFreeBlock(ptrNewFreeBlock); // Insert new block into free list
     blockSize = reqSize;  // Update blockSize to the size of the allocated block
   }
-  // 2) Update used size + tag
+  // 2) Update allocated block's size + tag.
   precedingBlockUseTag = ptrFreeBlock->sizeAndTags & TAG_PRECEDING_USED;
   ptrFreeBlock->sizeAndTags = precedingBlockUseTag | reqSize | TAG_USED;
-  // 3) Remove that used block from the list
+  // 3) Remove that allocated block from the list.
   removeFreeBlock(ptrFreeBlock);
-  // 4) Return pointer to the payload of that block, aka where the "next" pointer would be stored in the BlockInfo
+  // 4) Return pointer to the payload of that block, aka where the "next" pointer would be stored in the BlockInfo.
   return UNSCALED_POINTER_ADD(ptrFreeBlock, WORD_SIZE); 
 }
 
