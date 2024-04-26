@@ -358,7 +358,8 @@ void* mm_malloc (size_t size) {
   size_t reqSize;
   BlockInfo * ptrFreeBlock = NULL;
   size_t blockSize;
-  size_t precedingBlockUseTag;
+  size_t precedingBlockUseTag; // blockInfo + blockSize - WORD_SIZE
+  size_t * footer; 
 
   // Zero-size requests get NULL.
   if (size == 0) {
@@ -381,8 +382,6 @@ void* mm_malloc (size_t size) {
   // Implement mm_malloc.  You can change or remove any of the above
   // code.  It is included as a suggestion of where to start.
 
-  // NOTE: To free a block, remove it from the list and return a pointer to it.
-
   // 1) Search free list for free block.
   //    If it is full, request more space.
   ptrFreeBlock = searchFreeList(reqSize);
@@ -393,25 +392,27 @@ void* mm_malloc (size_t size) {
   // Find out how big is it, and if its too big we split it and insert ptrNewFreeBlock
   // If diff (size given - size asked for) < MIN_BLOCK_SIZE dont split.
   blockSize = SIZE(ptrFreeBlock->sizeAndTags);
+
   if ((blockSize - reqSize) >= MIN_BLOCK_SIZE) {
     BlockInfo * ptrNewFreeBlock = UNSCALED_POINTER_ADD(ptrFreeBlock, reqSize); // Pointer to new free block.
     size_t newFreeBlockSize = blockSize - reqSize;
-    ptrNewFreeBlock->sizeAndTags = newFreeBlockSize | TAG_PRECEDING_USED; // Update size and tag of new free block.
-    // TO DO: Set footer for free blocks. Replica for the header.
-
+    ptrNewFreeBlock->sizeAndTags = newFreeBlockSize | TAG_PRECEDING_USED; // Update size and tag of new free block. Used tag defaulted to 0 or free.
+    // Set footer for free blocks. Replica for the header.
+    footer = UNSCALED_POINTER_ADD(ptrNewFreeBlock, (newFreeBlockSize - WORD_SIZE)); // Move pointer to footer location.
+    *footer = ptrNewFreeBlock->sizeAndTags;                                         // Set footer.
     insertFreeBlock(ptrNewFreeBlock); // Insert new block into free list
   }
-  // 2) Remove that block from the list
-  removeFreeBlock(ptrFreeBlock);
-  // 3) Update size + tag
+  // 2) Update used size + tag
   ptrFreeBlock->sizeAndTags = (ptrFreeBlock->sizeAndTags & TAG_PRECEDING_USED) | blockSize | TAG_USED;
+  // 3) Remove that used block from the list
+  removeFreeBlock(ptrFreeBlock);
   // 4) Return pointer to the payload of that block, aka where the "next" pointer would be stored in the BlockInfo
   return UNSCALED_POINTER_ADD(ptrFreeBlock, WORD_SIZE); 
 }
 
 /* Free the block referenced by ptr. */
 void mm_free (void *ptr) {     // Pointer to PAYLOAD.
-  size_t payloadSize;
+  // size_t payloadSize;
   BlockInfo * blockInfo;       // Pointer that should point to header that contains sizeAndTags.
   BlockInfo * followingBlock;
   size_t blockSize;            // Total size including header, payload, and footer.
@@ -429,11 +430,10 @@ void mm_free (void *ptr) {     // Pointer to PAYLOAD.
   footer = UNSCALED_POINTER_ADD(blockInfo, (blockSize - WORD_SIZE)); // Move pointer to footer location.
   *footer = blockInfo->sizeAndTags;                                  // Set footer.
 
+  // Coalesce if necessary by calling coalesceFreeBlock()
+  coalesceFreeBlock(blockInfo);
   // Insert new freed block into the free list
   insertFreeBlock(blockInfo);
-
-  // TO DO: Coalesce if necessary by calling coalesceFreeBlock()
-
 }
 
 
