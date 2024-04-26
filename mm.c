@@ -389,21 +389,22 @@ void* mm_malloc (size_t size) {
     requestMoreSpace(reqSize);
     ptrFreeBlock = searchFreeList(reqSize);
   }
-  // Find out how big is it, and if its too big we split it and insert ptrNewFreeBlock
+  // Calculate block size, and if its too big we split it and insert ptrNewFreeBlock
   // If diff (size given - size asked for) < MIN_BLOCK_SIZE dont split.
   blockSize = SIZE(ptrFreeBlock->sizeAndTags);
-
   if ((blockSize - reqSize) >= MIN_BLOCK_SIZE) {
     BlockInfo * ptrNewFreeBlock = UNSCALED_POINTER_ADD(ptrFreeBlock, reqSize); // Pointer to new free block.
     size_t newFreeBlockSize = blockSize - reqSize;
-    ptrNewFreeBlock->sizeAndTags = newFreeBlockSize | TAG_PRECEDING_USED; // Update size and tag of new free block. Used tag defaulted to 0 or free.
+    ptrNewFreeBlock->sizeAndTags = newFreeBlockSize | TAG_PRECEDING_USED; // Update size new free block. Mark preceding block is used.
     // Set footer for free blocks. Replica for the header.
     footer = UNSCALED_POINTER_ADD(ptrNewFreeBlock, (newFreeBlockSize - WORD_SIZE)); // Move pointer to footer location.
-    *footer = ptrNewFreeBlock->sizeAndTags;                                         // Set footer.
+    *footer = newFreeBlockSize | TAG_PRECEDING_USED;                                // Set footer.
     insertFreeBlock(ptrNewFreeBlock); // Insert new block into free list
+    blockSize = reqSize;  // Update blockSize to the size of the allocated block
   }
   // 2) Update used size + tag
-  ptrFreeBlock->sizeAndTags = (ptrFreeBlock->sizeAndTags & TAG_PRECEDING_USED) | blockSize | TAG_USED;
+  precedingBlockUseTag = ptrFreeBlock->sizeAndTags & TAG_PRECEDING_USED;
+  ptrFreeBlock->sizeAndTags = precedingBlockUseTag | reqSize | TAG_USED;
   // 3) Remove that used block from the list
   removeFreeBlock(ptrFreeBlock);
   // 4) Return pointer to the payload of that block, aka where the "next" pointer would be stored in the BlockInfo
@@ -431,7 +432,7 @@ void mm_free (void *ptr) {     // Pointer to PAYLOAD.
   *footer = blockInfo->sizeAndTags;                                  // Set footer.
 
   // Coalesce if necessary by calling coalesceFreeBlock()
-  coalesceFreeBlock(blockInfo);
+  // coalesceFreeBlock(blockInfo);
   // Insert new freed block into the free list
   insertFreeBlock(blockInfo);
 }
