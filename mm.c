@@ -360,6 +360,7 @@ void* mm_malloc (size_t size) {
   size_t blockSize;
   size_t precedingBlockUseTag; 
   size_t * footer; 
+  BlockInfo * followingBlock;
 
   // Zero-size requests get NULL.
   if (size == 0) {
@@ -392,19 +393,22 @@ void* mm_malloc (size_t size) {
   // Calculate total free block size, and if its too big we split it and insert ptrNewFreeBlock.
   // If diff (size given - size asked for) < MIN_BLOCK_SIZE dont split.
   blockSize = SIZE(ptrFreeBlock->sizeAndTags);
-  if ((blockSize - reqSize) >= MIN_BLOCK_SIZE) {
+  if ((blockSize - reqSize) >= MIN_BLOCK_SIZE) { // Case where we split.
     BlockInfo * ptrNewFreeBlock = UNSCALED_POINTER_ADD(ptrFreeBlock, reqSize); // Pointer to new free block.
     size_t newFreeBlockSize = blockSize - reqSize;
-    ptrNewFreeBlock->sizeAndTags = newFreeBlockSize | TAG_PRECEDING_USED; // Update size new free block. Mark preceding block is used.
+    ptrNewFreeBlock->sizeAndTags = newFreeBlockSize; // Update size of new free block. Free block by default has preceding block tag set.
     // Set footer for free block. Replica of the header.
     footer = UNSCALED_POINTER_ADD(ptrNewFreeBlock, (newFreeBlockSize - WORD_SIZE)); // Move pointer to footer location.
-    *footer = newFreeBlockSize | TAG_PRECEDING_USED;                                // Set footer.
-    insertFreeBlock(ptrNewFreeBlock); // Insert new block into free list
+    *footer = newFreeBlockSize;                                                     // Set footer.
+    insertFreeBlock(ptrNewFreeBlock); // Insert new block into free list.
     blockSize = reqSize;  // Update blockSize to the size of the allocated block
   }
   // 2) Update allocated block's size + tag.
   precedingBlockUseTag = ptrFreeBlock->sizeAndTags & TAG_PRECEDING_USED;
-  ptrFreeBlock->sizeAndTags = precedingBlockUseTag | reqSize | TAG_USED;
+  ptrFreeBlock->sizeAndTags = blockSize| precedingBlockUseTag | TAG_USED;
+  // Update the tag of the following block.
+  followingBlock = UNSCALED_POINTER_ADD(ptrFreeBlock, blockSize);
+  followingBlock->sizeAndTags = followingBlock->sizeAndTags | TAG_PRECEDING_USED; // Sets TAG_PRECEDING_USED of following block.
   // 3) Remove that allocated block from the list.
   removeFreeBlock(ptrFreeBlock);
   // 4) Return pointer to the payload of that block, aka where the "next" pointer would be stored in the BlockInfo.
@@ -413,7 +417,6 @@ void* mm_malloc (size_t size) {
 
 /* Free the block referenced by ptr. */
 void mm_free (void *ptr) {     // Pointer to PAYLOAD.
-  // size_t payloadSize;
   BlockInfo * blockInfo;       // Pointer that should point to header that contains sizeAndTags.
   BlockInfo * followingBlock;
   size_t blockSize;            // Total size including header, payload, and footer.
@@ -423,25 +426,19 @@ void mm_free (void *ptr) {     // Pointer to PAYLOAD.
   // above.  They are included as minor hints.
 
   // Convert the given used block into a free block.
-  blockInfo = UNSCALED_POINTER_SUB(ptr, WORD_SIZE); // Set pointer from payload back to header.
   // Free given block by clearing lowest bit to be 0 by masking with "TAG_USED = 1"
+  blockInfo = UNSCALED_POINTER_SUB(ptr, WORD_SIZE); // Set pointer from payload back to header.
   blockInfo->sizeAndTags = blockInfo->sizeAndTags & (~TAG_USED);
-  // From header, pointer add with size to get to footer. Set footer to sizeAndTags of header.
+  // From header, pointer-add with size to get to footer. Set footer to sizeAndTags of header.
   blockSize = SIZE(blockInfo->sizeAndTags);
   footer = UNSCALED_POINTER_ADD(blockInfo, (blockSize - WORD_SIZE)); // Move pointer to footer location.
   *footer = blockInfo->sizeAndTags;                                  // Set footer.
-  // Notify followingBlock about newly preceding free block by clearing 2nd lowest bit bymasking with "TAG_PRECEDING_USED = 2"
+  // Notify followingBlock about newly preceding free block by clearing 2nd lowest bit by masking with "TAG_PRECEDING_USED = 2"
   followingBlock = UNSCALED_POINTER_ADD(blockInfo, blockSize);
   followingBlock->sizeAndTags = followingBlock->sizeAndTags & (~TAG_PRECEDING_USED);
-  // Also update the footer of the following block if it is free. End of heap used bit is set.
-  if (!(followingBlock->sizeAndTags & TAG_USED)) {
-    size_t *followingFooter = UNSCALED_POINTER_ADD(followingBlock, SIZE(followingBlock->sizeAndTags) - WORD_SIZE);
-    *followingFooter = followingBlock->sizeAndTags;
-  }
   // Insert new freed block into the free list
   insertFreeBlock(blockInfo);
   // Coalesce if necessary by calling coalesceFreeBlock()
   coalesceFreeBlock(blockInfo);
 }
-
 
